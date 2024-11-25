@@ -103,3 +103,37 @@ systemd:
 
         [Install]
         WantedBy=multi-user.target
+
+    - name: tailscale.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Run Tailscale
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        ExecStartPre=mkdir -p /var/lib/tailscale
+        ExecStartPre=-/bin/podman kill tailscale
+        ExecStartPre=-/bin/podman rm tailscale
+        ExecStartPre=-/bin/podman pull docker.io/tailscale/tailscale
+
+        ExecStart=/bin/podman run \
+                  --name tailscale \
+                  --restart unless-stopped \
+                  --network host \
+                  --privileged \
+                  --cap-add NET_ADMIN \
+                  --cap-add SYS_MODULE \
+                  -v /dev/net/tun:/dev/net/tun \
+                  -v /var/lib/tailscale:/var/lib/tailscale:z \
+                  -e TS_STATE_DIR=/var/lib/tailscale \
+                  -e TS_AUTHKEY="${TAILSCALE_AUTH_KEY}" \
+                  -e TS_HOSTNAME="Rpi" \
+                  -e TS_USERSPACE=false \
+                  docker.io/tailscale/tailscale
+
+        ExecStop=/bin/podman stop tailscale
+
+        [Install]
+        WantedBy=multi-user.target
