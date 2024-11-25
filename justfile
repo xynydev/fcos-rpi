@@ -10,7 +10,7 @@ coreos-installer disk: compile
     sudo podman run --pull=newer --privileged --rm \
         -v /dev:/dev -v /run/udev:/run/udev -v .:/data -w /data \
         quay.io/coreos/coreos-installer:release \
-        install -a aarch64 -s stable -i config.ign --append-karg nomodeset {{ disk }} --save-partlabel var
+        install -a aarch64 -s stable -i config.ign --append-karg nomodeset {{ disk }}
 
 # https://docs.fedoraproject.org/en-US/fedora-coreos/provisioning-raspberry-pi4/
 efi-workaround disk:
