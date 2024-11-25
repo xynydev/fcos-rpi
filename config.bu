@@ -1,7 +1,105 @@
 variant: fcos
 version: 1.5.0
+
 passwd:
   users:
     - name: core
       ssh_authorized_keys:
         - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP4HDe0Ir9rof0haQ9gHWONocYISisp31njfDpEi41lI e@edesk
+
+storage:
+  disks:
+    # The link to the block device the OS was booted from.
+    - device: /dev/disk/by-id/coreos-boot-disk
+      # We do not want to wipe the partition table since this is the primary
+      # device.
+      wipe_table: false
+      partitions:
+        - number: 4
+          label: root
+          # Allocate at least 8 GiB to the rootfs.
+          size_mib: 8192
+          resize: true
+        - size_mib: 0
+          # We assign a descriptive label to the partition. This is important
+          # for referring to it in a device-agnostic way in other parts of the
+          # configuration.
+          label: var
+  filesystems:
+    - path: /var
+      device: /dev/disk/by-partlabel/var
+      # We can select the filesystem we'd like.
+      format: ext4
+      # Ask Butane to generate a mount unit for us so that this filesystem
+      # gets mounted in the real root.
+      with_mount_unit: true
+      # Don't wipe the filesystem.
+      wipe_filesystem: false
+
+  files:
+    - path: /etc/systemd/resolved.conf.d/adguardhome.conf
+      contents:
+        inline: |
+          [Resolve]
+          DNS=127.0.0.1
+          DNSStubListener=no
+
+systemd:
+  units:
+    - name: adguard-home.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Run Adguard Home
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        ExecStartPre=mkdir -p /var/lib/adguardhome/work /var/lib/adguardhome/conf
+        ExecStartPre=-/bin/podman kill adguardhome
+        ExecStartPre=-/bin/podman rm adguardhome
+        ExecStartPre=-/bin/podman pull docker.io/adguard/adguardhome
+
+        ExecStart=/bin/podman run \
+                  --name adguardhome \
+                  --restart unless-stopped \
+                  -v /var/lib/adguardhome/work:/opt/adguardhome/work:z \
+                  -v /var/lib/adguardhome/conf:/opt/adguardhome/conf:z \
+                  --network host \
+                  -p 53:53/tcp -p 53:53/udp \
+                  -p 67:67/udp -p 68:68/udp \
+                  -p 80:80/tcp -p 443:443/tcp -p 443:443/udp -p 3000:3000/tcp \
+                  -p 853:853/tcp \
+                  -p 853:853/udp \
+                  -p 5443:5443/tcp -p 5443:5443/udp \
+                  -p 6060:6060/tcp \
+                  docker.io/adguard/adguardhome
+
+        ExecStop=/bin/podman stop adguardhome
+
+        [Install]
+        WantedBy=multi-user.target
+
+    - name: cloudflared.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Run Cloudflared
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        ExecStartPre=-/bin/podman kill cloudflared
+        ExecStartPre=-/bin/podman rm cloudflared
+        ExecStartPre=-/bin/podman pull docker.io/cloudflare/cloudflared
+
+        ExecStart=/bin/podman run \
+                  --name cloudflared \
+                  --restart unless-stopped \
+                  --network host \
+                  docker.io/cloudflare/cloudflared tunnel --no-autoupdate run --token ${CLOUDFLARE_TOKEN}
+
+        ExecStop=/bin/podman stop cloudflared
+
+        [Install]
+        WantedBy=multi-user.target
