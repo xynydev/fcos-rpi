@@ -5,7 +5,7 @@ passwd:
   users:
     - name: core
       ssh_authorized_keys:
-        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP4HDe0Ir9rof0haQ9gHWONocYISisp31njfDpEi41lI e@edesk
+        - ${SSH_PUBKEY}
 
 storage:
   disks:
